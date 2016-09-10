@@ -44,10 +44,11 @@ class RestaurantData:
             self.addTourist()
             count = self.numOfLocals
             print self.numOfTourists, self.numOfLocals
-        else:
+        elif userType == 1:
             self.addLocal()
             count = self.numOfTourists
             print self.numOfTourists, self.numOfLocals
+        print "nowCount=" + str(count)
         return count
 
 _allData = dict()
@@ -56,9 +57,20 @@ _allData = dict()
 def get_results():
     return getResults(request.args['interest'], request.args['time'],request.args['location'],request.args['distance'])
 
+@app.route("/touristResults", methods=['GET'])
+def get_touristResults():
+    return getTouristResults(request.args['interest'], request.args['time'],request.args['location'],request.args['distance'])
+
 @app.route('/update', methods = ['GET'])
 def post_update():
     return postUpdate(request.args['name'],request.args['interest'], request.args['time'],request.args['userType'])
+
+@app.after_request
+def after_request(response):
+  response.headers.add('Access-Control-Allow-Origin', '*')
+  response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+  response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+  return response
 
 def deg2rad(degrees):
     return math.pi*degrees/180.0
@@ -119,17 +131,51 @@ def getResults(interest,time,location,distance):
             **params
         )
 
-        foundBusiness = [ business.name for business in searchResponse.businesses  if business.rating > RATING]
+        foundBusiness = [ ({'name':business.name,'count':1}) for business in searchResponse.businesses  if business.rating > RATING]
+        return Response(json.dumps(foundBusiness),mimetype='application/json')
+
+def getTouristResults(interest=None,time=None,location=None,distance=None):
+    keys=('name','interest','time','numberOfLocals','distance')
+    allBusinesses =  [({'name': value.name,'interest':value.interest,'time':value.timeslot,'numberOfLocals':value.numOfLocals,'distance':'1'}) for key,value in _allData.iteritems() ]
+    return Response(json.dumps(allBusinesses),mimetype='application/json')
+
+    splitLoc = location.split(",")
+    lat = float(splitLoc[0])
+    lon = float(splitLoc[1])
+    
+    with io.open('config_secret.json') as cred:
+        creds = json.load(cred)
+        auth = Oauth1Authenticator(**creds)
+        client = Client(auth)
+        bounds = boundingBox( lat, lon, float(distance) * 1.0 )
+        print bounds
+
+        params = {
+        'term': interest,
+        'sort':2
+        }
+
+        searchResponse = client.search_by_bounding_box(
+            bounds[0],
+            bounds[1],
+            bounds[2],
+            bounds[3],
+            **params
+        )
+
+        foundBusiness = [ ({'name':business.name,'count':1}) for business in searchResponse.businesses  if business.rating > RATING]
         return Response(json.dumps(foundBusiness),mimetype='application/json') 
 
 def postUpdate(name, interest, time, userType):
     key = name + ',' + time
     count = 0
     if key in _allData:
-        count = _allData[key].addCount(userType)
+        count = _allData[key].addCount(int(userType))
+        print "old object"
     else:
         _allData[key] = RestaurantData(name,time,interest)
-        count = _allData[key].addCount(userType)
+        print "new object"
+        count = _allData[key].addCount(int(userType))   
     
     for key,data in _allData.iteritems():
         print data.name, data.interest, data.timeslot, data.numOfTourists, data.numOfLocals 
