@@ -6,9 +6,11 @@ import csv
 import string
 import io
 import math
+from flask import jsonify
 from yelp.client import Client
 from yelp.oauth1_authenticator import Oauth1Authenticator
 import urllib
+from flask import Response
 
 ## globals
 SF_LOCATIONS_URL='https://data.sfgov.org/resource/vbiu-2p9h.json'
@@ -22,9 +24,41 @@ WGS84_b = 6356752.3  # Minor semiaxis [m]
 
 app = Flask(__name__)
 
+class RestaurantData:
+    def __init__(self, name,timeslot,interest):
+        self.name = name
+        self.timeslot = timeslot
+        self.numOfTourists = 0
+        self.numOfLocals = 0
+        self.interest = interest
+    
+    def addTourist(self):
+        self.numOfTourists = self.numOfTourists + 1
+    
+    def addLocal(self):
+        self.numOfLocals = self.numOfLocals + 1
+
+    def addCount(self, userType):
+        count = 0
+        if userType == 0: # 0 = tourist, 1 = local
+            self.addTourist()
+            count = self.numOfLocals
+            print self.numOfTourists, self.numOfLocals
+        else:
+            self.addLocal()
+            count = self.numOfTourists
+            print self.numOfTourists, self.numOfLocals
+        return count
+
+_allData = dict()
+
 @app.route("/results", methods=['GET'])
 def get_results():
-    return json.dumps(getResults(request.args['interest'], request.args['time'],request.args['location'],request.args['distance']))
+    return getResults(request.args['interest'], request.args['time'],request.args['location'],request.args['distance'])
+
+@app.route('/update', methods = ['GET'])
+def post_update():
+    return postUpdate(request.args['name'],request.args['interest'], request.args['time'],request.args['userType'])
 
 def deg2rad(degrees):
     return math.pi*degrees/180.0
@@ -86,7 +120,23 @@ def getResults(interest,time,location,distance):
         )
 
         foundBusiness = [ business.name for business in searchResponse.businesses  if business.rating > RATING]
-        return json.dumps(foundBusiness) 
+        return Response(json.dumps(foundBusiness),mimetype='application/json') 
+
+def postUpdate(name, interest, time, userType):
+    key = name + ',' + time
+    count = 0
+    if key in _allData:
+        count = _allData[key].addCount(userType)
+    else:
+        _allData[key] = RestaurantData(name,time,interest)
+        count = _allData[key].addCount(userType)
+    
+    for key,data in _allData.iteritems():
+        print data.name, data.interest, data.timeslot, data.numOfTourists, data.numOfLocals 
+
+    return Response(str(count),mimetype='application/json')
+
+    
 
 if __name__ == "__main__":
     app.run()
