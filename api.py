@@ -37,20 +37,22 @@ class RestaurantData:
     
     def addLocal(self):
         self.numOfLocals = self.numOfLocals + 1
+    
+    def getOtherCount(self,userType):
+        if userType == 0:
+            return self.numOfLocals
+        elif userType == 1:
+            return self.numOfTourists
 
     def addCount(self, userType):
-        count = 0
         if userType == 0: # 0 = tourist, 1 = local
             self.addTourist()
-            count = self.numOfLocals
             print self.numOfTourists, self.numOfLocals
         elif userType == 1:
             self.addLocal()
-            count = self.numOfTourists
             print self.numOfTourists, self.numOfLocals
-        print "nowCount=" + str(count)
-        return count
-
+        return self.getOtherCount(userType)
+    
 _allData = dict()
 
 @app.route("/results", methods=['GET'])
@@ -131,7 +133,7 @@ def getResults(interest,time,location,distance):
             **params
         )
 
-        foundBusiness = [ ({'name':business.name,'count':1}) for business in searchResponse.businesses  if business.rating > RATING]
+        foundBusiness = [ ({'name':business.name,'count':tryGetKey(business.name,time,0)}) for business in searchResponse.businesses  if business.rating > RATING]
         return Response(json.dumps(foundBusiness),mimetype='application/json')
 
 def getTouristResults(interest=None,time=None,location=None,distance=None):
@@ -139,42 +141,20 @@ def getTouristResults(interest=None,time=None,location=None,distance=None):
     allBusinesses =  [({'name': value.name,'interest':value.interest,'time':value.timeslot,'numberOfLocals':value.numOfLocals,'distance':'1'}) for key,value in _allData.iteritems() ]
     return Response(json.dumps(allBusinesses),mimetype='application/json')
 
-    splitLoc = location.split(",")
-    lat = float(splitLoc[0])
-    lon = float(splitLoc[1])
-    
-    with io.open('config_secret.json') as cred:
-        creds = json.load(cred)
-        auth = Oauth1Authenticator(**creds)
-        client = Client(auth)
-        bounds = boundingBox( lat, lon, float(distance) * 1.0 )
-        print bounds
 
-        params = {
-        'term': interest,
-        'sort':2
-        }
-
-        searchResponse = client.search_by_bounding_box(
-            bounds[0],
-            bounds[1],
-            bounds[2],
-            bounds[3],
-            **params
-        )
-
-        foundBusiness = [ ({'name':business.name,'count':1}) for business in searchResponse.businesses  if business.rating > RATING]
-        return Response(json.dumps(foundBusiness),mimetype='application/json') 
+def tryGetKey(name,time,userType):
+    key = getDataKey(name,time)
+    if key in _allData:
+        return getOtherCount( _allData[key], userType )
+    return 1
 
 def postUpdate(name, interest, time, userType):
-    key = name + ',' + time
+    key = getDataKey(name,time)
     count = 0
     if key in _allData:
         count = _allData[key].addCount(int(userType))
-        print "old object"
     else:
         _allData[key] = RestaurantData(name,time,interest)
-        print "new object"
         count = _allData[key].addCount(int(userType))   
     
     for key,data in _allData.iteritems():
@@ -182,7 +162,8 @@ def postUpdate(name, interest, time, userType):
 
     return Response(str(count),mimetype='application/json')
 
-    
+def getDataKey(name, time):
+    return name + ',' + time   
 
 if __name__ == "__main__":
     app.run()
