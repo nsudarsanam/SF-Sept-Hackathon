@@ -145,7 +145,7 @@ def getTouristResults(interest=None,time=None,location=None,distance=None):
 def tryGetKey(name,time,userType):
     key = getDataKey(name,time)
     if key in _allData:
-        return getOtherCount( _allData[key], userType )
+        return _allData[key].getOtherCount(userType)
     return 1
 
 def postUpdate(name, interest, time, userType):
@@ -163,7 +163,7 @@ def postUpdate(name, interest, time, userType):
     return Response(str(count),mimetype='application/json')
 
 def getDataKey(name, time):
-    return name + ',' + time   
+    return name.lower() + ',' + time   
 
 if __name__ == "__main__":
     app.run()
